@@ -1,0 +1,1 @@
+# rpi-temperature-collector
