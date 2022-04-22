@@ -1,92 +1,201 @@
 import sys
 import time
-import datetime
+import uuid
+from datetime import datetime, timedelta
 import boto3
 from random import randint
 # from w1thermsensor import W1ThermSensor
 
-dynamodb = boto3.client('dynamodb') # TODO: add region name
+FLAG_ADMIN = "-a"
+FLAG_OFFSET = "-o"
+
+VALUE_COLUMN = "value"
+LOCATION_COLUMN = "location"
+TIME_COLUMN = "time"
+UUID_COLUMN = "uuid"
+TABLE_PREFIX = "rpi-temperature-"
+TEMPERATURE_UNIT = "°C"
+TEST_TABLE_NAME = "rpiTempTestTable"
+
+GET_REQUEST_WAIT_TIME = 0.2
+UPDATE_REQUEST_WAIT_TIME = 6
+READABLE_WAIT_TIME = 0
+
+ADMIN = False
+
+dynamodb = boto3.resource('dynamodb')
 # sensor1 = W1ThermSensor
 
+
+def wait(seconds):
+    if seconds > 0:
+        time.sleep(seconds)
+
+
 def getSensorReading():
+    print("Reading temperature...")
     # TODO: build out real sensor reading
-    return randint(16, 30)
-
-
-def getDate(now):
-    return now.strftime("%Y-%m-%d")
-
-
-def getTime(now):
-    return now.strftime("%H:%M:%S")
+    wait(READABLE_WAIT_TIME)
+    currentTemperature = randint(16, 30)
+    print(f"Value: {currentTemperature}{TEMPERATURE_UNIT}.")
+    wait(READABLE_WAIT_TIME)
+    return currentTemperature
 
 
 def getDateTime(now):
     return {
-        date: getDate(now),
-        time: getTime(now)
+        "ms": int(now.timestamp() * 1000),
+        "date": now.strftime("%Y-%m-%d"),
+        "time": now.strftime("%H:%M:%S"),
+        "source": now
     }
 
 
 def checkIfCurrentTableExists(tableName):
-    response = dynamodb.list_tables(
-        ExclusiveStartTableName = tableName,
-        Limit = 2
-    )
-    if "TableNames" in response:
-        if len(response["TableNames"]) == 1 and tableName in response["TableNames"]:
-            if tableName in response["TableNames"]:
-                return True
-            else:
-                return False
-    raise Exception("There was an issue fetching dynamo tables", response)
+    tableCreationDate = False
+    try:
+        tableCreationDate = dynamodb.Table(tableName).creation_date_time
+        wait(GET_REQUEST_WAIT_TIME)
+    except:
+        tableCreationDate = False
+
+    return not not tableCreationDate
 
 
 def createNewTable(tableName):
-    # creating a new table takes time
-    # aws will return a CREATING status
-    # table will switch to ACTIVE when it's ready
-    # can use DescribeTable to check the status of a table
-    response = dynamodb.create_table(
-            AttributeDefinitions = [
-                    {
-                        "AttributeName": "Time",
-                        "AttributeType": "S"
-                    },
-                    {
-                        "AttributeName": ""
-                    }
-                ]
-            )
+    print(f"Creating new table {tableName}...")
+    table = dynamodb.create_table(
+        TableName=tableName,
+        KeySchema=[
+            {
+                "AttributeName": UUID_COLUMN,
+                "KeyType": "HASH"
+            }
+        ],
+        AttributeDefinitions=[
+            {
+                "AttributeName": UUID_COLUMN,
+                "AttributeType": "S"
+            }
+        ],
+        ProvisionedThroughput={
+            "ReadCapacityUnits": 2,
+            "WriteCapacityUnits": 2
+        }
+    )
+    wait(UPDATE_REQUEST_WAIT_TIME) # creating a new table takes time
+    if table:
+        print(f"Table results: {table}.")
+        wait(READABLE_WAIT_TIME)
+
+
+def pushStat(stat, id, dateTime, tableName):
+    print(f"Pushing value {stat} for location {id} at time {dateTime['time']} to table {tableName}...")
+    wait(READABLE_WAIT_TIME)
+    response = dynamodb.Table(tableName).put_item(
+        Item={
+            UUID_COLUMN: str(uuid.uuid4()),
+            VALUE_COLUMN: stat,
+            LOCATION_COLUMN: id,
+            TIME_COLUMN: dateTime["ms"]
+        }
+    )
+    wait(UPDATE_REQUEST_WAIT_TIME)
+    if response and response["ResponseMetadata"]["HTTPStatusCode"] == 200:
+        print(f"Successfully pushed value to table {tableName}.")
+    else:
+        raise Exception(f"There was an issue pushing value for {id} to table {tableName}.")
+
+
+def lowerProvisionForTableOffset(offsetDays, now):
+    targetDate = now + timedelta(offsetDays)
+    targetDateTime = getDateTime(targetDate)
+    targetTableName = getTableName(targetDateTime["date"])
+    print(f"Attempting to lower provisions for table {targetTableName}...")
+    wait(READABLE_WAIT_TIME)
+    if checkIfCurrentTableExists(targetTableName):
+        table = dynamodb.Table(targetTableName).update(
+            ProvisionedThroughput={
+                "ReadCapacityUnits": 1,
+                "WriteCapacityUnits": 1
+            }
+        )
+        wait(UPDATE_REQUEST_WAIT_TIME)
+        if table:
+            print(f"Lowered provisions for table {targetTableName}.")
+    else:
+        print(f"Table {targetTableName} doesn't exist! No need to lower provisions.")
 
 
 
-def main(location):
-    # get current time
-    now = datetime.now()
-    dateTime = getDateTime(now)
-    # get current temperature from sensor
-    temperature = getSensorReading()
-    print("The temperature at %s for sensor1 is %s c" % dateTime.time, temperature)
 
-    # check if table for today exists
-    if not checkIfCurrentTableExists(dateTime.date):
-        # create new table for today
-        createNewTable(dateTime.date)
-        # lower provisioned throughput of older tables
-
-    # push stat to today's table
+def getTableName(dateString):
+    return f"{TABLE_PREFIX}{dateString}"
 
 
+def setAdmin():
+    print("This instance can create new tables with admin priviledge.")
+    global ADMIN
+    ADMIN = True
+    wait(READABLE_WAIT_TIME)
 
+
+def doOffset():
+    if FLAG_OFFSET in sys.argv:
+        offsetSeconds = randint(1, 10)
+        print(f"Offsetting reading for {offsetSeconds} seconds...")
+        wait(offsetSeconds)
 
 
 def usage():
-    print("Usage: python3 temperatureSensor.py [location]")    
+    print("")
+    print(f"Usage: python3 {sys.argv[0]} [location]")
+    print("")
+    print("Optional flags:")
+    print("    -a    [admin] Use to allow script to create and alter tables")
+    print("    -o    [offset] Use to add a random offset up to 10 second to beginning of script")
+
+
+def main(location):        
+    # get current time
+    dateTime = getDateTime(datetime.now())
+    tableName = getTableName(dateTime["date"])
+    # tableName = testTableName
+    print(f"The table to store next reading is {tableName}.")
+    wait(READABLE_WAIT_TIME)
+    # get current temperature from sensor
+    temperature = getSensorReading()
+    print (f'The temperature in {location} at {dateTime["time"]} is {temperature}{TEMPERATURE_UNIT}.')
+    wait(READABLE_WAIT_TIME)
+    # check if table for today exists
+    if ADMIN:
+        if not checkIfCurrentTableExists(tableName):
+            print(f"Table {tableName} DOES NOT exist!")
+            # create new table for today
+            createNewTable(tableName)
+            # lower provisioned throughput of older tables
+            lowerProvisionForTableOffset(-1, dateTime["source"])
+    wait(READABLE_WAIT_TIME)
+    # push stat to today's table
+    if checkIfCurrentTableExists(tableName):
+        # print("")
+        pushStat(temperature, location, dateTime, tableName)
+    else:
+        print(f"Table {tableName} DOES NOT exist!")
+    wait(READABLE_WAIT_TIME)
+    finishedDateTime = getDateTime(datetime.now())
+    timeTaken = int((finishedDateTime["ms"] - dateTime["ms"]) / 1000)
+    sys.exit(f"Completed in {timeTaken}s.")   
+
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
+    if len(sys.argv) < 2:
         usage()
-        sys.exit("Incorrect args.")
-    else:
-        main(sys.argv[1])
+        sys.exit()
+    if FLAG_ADMIN in sys.argv:
+        setAdmin()
+    if FLAG_OFFSET in sys.argv:
+        doOffset()
+            
+        
+    main(sys.argv[1])
