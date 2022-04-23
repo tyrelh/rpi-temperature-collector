@@ -70,12 +70,20 @@ def createNewTable(tableName):
             {
                 "AttributeName": UUID_COLUMN,
                 "KeyType": "HASH"
+            },
+            {
+                "AttributeName": TIME_COLUMN,
+                "KeyType": "RANGE"
             }
         ],
         AttributeDefinitions=[
             {
                 "AttributeName": UUID_COLUMN,
                 "AttributeType": "S"
+            },
+            {
+                "AttributeName": TIME_COLUMN,
+                "AttributeType": "N"
             }
         ],
         ProvisionedThroughput={
