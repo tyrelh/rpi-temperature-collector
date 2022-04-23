@@ -68,7 +68,7 @@ def createNewTable(tableName):
         TableName=tableName,
         KeySchema=[
             {
-                "AttributeName": UUID_COLUMN,
+                "AttributeName": LOCATION_COLUMN,
                 "KeyType": "HASH"
             },
             {
@@ -78,7 +78,7 @@ def createNewTable(tableName):
         ],
         AttributeDefinitions=[
             {
-                "AttributeName": UUID_COLUMN,
+                "AttributeName": LOCATION_COLUMN,
                 "AttributeType": "S"
             },
             {
@@ -87,7 +87,7 @@ def createNewTable(tableName):
             }
         ],
         ProvisionedThroughput={
-            "ReadCapacityUnits": 2,
+            "ReadCapacityUnits": 3,
             "WriteCapacityUnits": 2
         }
     )
