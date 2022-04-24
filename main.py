@@ -10,6 +10,7 @@ from random import randint
 
 FLAG_ADMIN = "-a"
 FLAG_OFFSET = "-o"
+FLAG_PERIOD = "-p"
 
 VALUE_COLUMN = "value"
 LOCATION_COLUMN = "location"
@@ -24,6 +25,7 @@ UPDATE_REQUEST_WAIT_TIME = 5.5
 READABLE_WAIT_TIME = 0
 
 ADMIN = False
+PERIOD = 1
 
 dynamodb = boto3.resource('dynamodb')
 # sensor1 = W1ThermSensor
@@ -104,7 +106,6 @@ def pushStat(stat, id, dateTime, tableName):
     wait(READABLE_WAIT_TIME)
     response = dynamodb.Table(tableName).put_item(
         Item={
-            UUID_COLUMN: str(uuid.uuid4()),
             VALUE_COLUMN: json.loads(json.dumps(stat), parse_float=Decimal),
             LOCATION_COLUMN: id,
             TIME_COLUMN: dateTime["ms"]
@@ -215,6 +216,8 @@ if __name__ == '__main__':
         sys.exit()
     if FLAG_ADMIN in sys.argv:
         setAdmin()
+    # if FLAG_PERIOD in sys.argv:
+        # setPeriod()
             
         
     main(sys.argv[1])
