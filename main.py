@@ -3,6 +3,8 @@ import time
 import uuid
 from datetime import datetime, timedelta
 import boto3
+import json
+from decimal import Decimal
 from random import randint
 # from w1thermsensor import W1ThermSensor
 
@@ -36,7 +38,7 @@ def getSensorReading():
     print("Reading temperature...", end="    ")
     # TODO: build out real sensor reading
     wait(READABLE_WAIT_TIME)
-    currentTemperature = randint(16, 30)
+    currentTemperature = randint(160, 300) / 10
     print(f"{currentTemperature}{TEMPERATURE_UNIT}.")
     wait(READABLE_WAIT_TIME)
     return currentTemperature
@@ -103,7 +105,7 @@ def pushStat(stat, id, dateTime, tableName):
     response = dynamodb.Table(tableName).put_item(
         Item={
             UUID_COLUMN: str(uuid.uuid4()),
-            VALUE_COLUMN: stat,
+            VALUE_COLUMN: json.loads(json.dumps(stat), parse_float=Decimal),
             LOCATION_COLUMN: id,
             TIME_COLUMN: dateTime["ms"]
         }
