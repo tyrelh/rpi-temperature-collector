@@ -161,15 +161,13 @@ def doOffset():
 
 
 def main(location):
-    # previousMinute = 0
-    previousM = getCurrentMinute() - POLLING_PERIOD_IN_MINUTES - 1
+    print("Start main.")
+    previousMinute = getCurrentMinute() - POLLING_PERIOD_IN_MINUTES - 1
     while(True):
-        # currentMinute = datetime.now().minute
-        currentM = getCurrentMinute()
-        if ((currentM - previousM >= POLLING_PERIOD_IN_MINUTES)):
-            print("Start.")
-            previousM = getCurrentMinute()
-            # previousMinute = currentMinute
+        currentMinute = getCurrentMinute()
+        if ((currentMinute - previousMinute >= POLLING_PERIOD_IN_MINUTES)):
+            print("Start reading.")
+            previousMinute = getCurrentMinute()
             if FLAG_OFFSET in sys.argv:
                 doOffset()
             # get current time
@@ -236,6 +234,7 @@ def valueIsACLIFlag(value):
 
 
 if __name__ == '__main__':
+    print("Start script.")
     if len(sys.argv) < 2 or valueIsACLIFlag(sys.argv[1]):
         usage()
         sys.exit()
