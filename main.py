@@ -171,7 +171,7 @@ def main(location):
             if FLAG_OFFSET in sys.argv:
                 doOffset()
             # get current time
-            dateTime = getDateTime(datetime.now() + timedelta(days=2))
+            dateTime = getDateTime(datetime.now())
             tableName = getTableName(dateTime["date"])
             # tableName = testTableName
             print(f"The table to store next reading is {tableName}.")
