@@ -7,7 +7,6 @@ import json
 from decimal import Decimal
 from random import randint
 from w1thermsensor import W1ThermSensor, Unit
-# from w1thermsensor import W1ThermSensor
 
 FLAG_ADMIN = "-a"
 FLAG_OFFSET = "-o"
@@ -30,7 +29,6 @@ PERIOD = 1
 
 dynamodb = boto3.resource('dynamodb')
 sensor = W1ThermSensor()
-# sensor1 = W1ThermSensor
 
 
 def wait(seconds):
@@ -42,6 +40,7 @@ def getSensorReading():
     print("Reading temperature...", end="    ")
     wait(READABLE_WAIT_TIME)
     currentTemperature = round(sensor.get_temperature(Unit.DEGREES_C), 1)
+    # currentTemperature = 99.9
     print(f"{currentTemperature}{TEMPERATURE_UNIT}.")
     wait(READABLE_WAIT_TIME)
     return currentTemperature
@@ -57,14 +56,17 @@ def getDateTime(now):
 
 
 def checkIfCurrentTableExists(tableName):
-    tableCreationDate = False
+    tableReady = False
     try:
-        tableCreationDate = dynamodb.Table(tableName).creation_date_time
+        table = dynamodb.Table(tableName)
         wait(GET_REQUEST_WAIT_TIME)
+        if (table):
+            if (table.table_status == "ACTIVE"):
+                tableReady = True
     except:
-        tableCreationDate = False
+        tableReady = False
 
-    return not not tableCreationDate
+    return tableReady
 
 
 def createNewTable(tableName):
