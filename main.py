@@ -1,6 +1,7 @@
+from multiprocessing.dummy import current_process
 import sys
 import time
-import uuid
+import math
 from datetime import datetime, timedelta
 import boto3
 import json
@@ -25,7 +26,7 @@ UPDATE_REQUEST_WAIT_TIME = 5.5
 READABLE_WAIT_TIME = 0
 
 ADMIN = False
-PERIOD = 1
+POLLING_PERIOD_IN_MINUTES = 1
 
 dynamodb = boto3.resource('dynamodb')
 sensor = W1ThermSensor()
@@ -55,7 +56,7 @@ def getDateTime(now):
     }
 
 
-def checkIfCurrentTableExists(tableName):
+def checkIfTableIsReady(tableName):
     tableReady = False
     try:
         table = dynamodb.Table(tableName)
@@ -127,7 +128,7 @@ def lowerProvisionForTableOffset(offsetDays, now):
     targetTableName = getTableName(targetDateTime["date"])
     print(f"Attempting to lower provisions for table {targetTableName}...", end="    ")
     wait(READABLE_WAIT_TIME)
-    if checkIfCurrentTableExists(targetTableName):
+    if checkIfTableIsReady(targetTableName):
         table = dynamodb.Table(targetTableName).update(
             ProvisionedThroughput={
                 "ReadCapacityUnits": 1,
@@ -147,11 +148,8 @@ def getTableName(dateString):
     return f"{TABLE_PREFIX}{dateString}"
 
 
-def setAdmin():
-    print("This instance can create new tables with admin priviledge.")
-    global ADMIN
-    ADMIN = True
-    wait(READABLE_WAIT_TIME)
+def getCurrentMinute():
+    return math.floor(time.perf_counter() / 60) 
 
 
 def doOffset():
@@ -162,25 +160,20 @@ def doOffset():
         print("Complete.")
 
 
-def usage():
-    print("")
-    print(f"Usage: python3 {sys.argv[0]} [location]", end="\n\n")
-    print("Optional flags:")
-    print("    -a    [admin] Use to allow script to create and alter tables")
-    print("    -o    [offset] Use to add a random offset up to 10 second to beginning of script")
-
-
 def main(location):
-    previousMinute = 0
+    # previousMinute = 0
+    previousM = getCurrentMinute() - POLLING_PERIOD_IN_MINUTES - 1
     while(True):
-        currentMinute = datetime.now().minute
-        if (currentMinute != previousMinute):
+        # currentMinute = datetime.now().minute
+        currentM = getCurrentMinute()
+        if ((currentM - previousM >= POLLING_PERIOD_IN_MINUTES)):
             print("Start.")
-            previousMinute = currentMinute
+            previousM = getCurrentMinute()
+            # previousMinute = currentMinute
             if FLAG_OFFSET in sys.argv:
                 doOffset()
             # get current time
-            dateTime = getDateTime(datetime.now())
+            dateTime = getDateTime(datetime.now() + timedelta(days=2))
             tableName = getTableName(dateTime["date"])
             # tableName = testTableName
             print(f"The table to store next reading is {tableName}.")
@@ -191,7 +184,7 @@ def main(location):
             wait(READABLE_WAIT_TIME)
             # check if table for today exists
             if ADMIN:
-                if not checkIfCurrentTableExists(tableName):
+                if not checkIfTableIsReady(tableName):
                     print(f"Table {tableName} DOES NOT exist!")
                     # create new table for today
                     createNewTable(tableName)
@@ -199,7 +192,7 @@ def main(location):
                     lowerProvisionForTableOffset(-1, dateTime["source"])
             wait(READABLE_WAIT_TIME)
             # push stat to today's table
-            if checkIfCurrentTableExists(tableName):
+            if checkIfTableIsReady(tableName):
                 # print("")
                 pushStat(temperature, location, dateTime, tableName)
             else:
@@ -209,18 +202,43 @@ def main(location):
             # timeTaken = int((finishedDateTime["ms"] - dateTime["ms"]) / 1000)
             # sys.exit(f"Completed in {timeTaken}s.")
         else:
-            print("Waiting...")
+            # print("Waiting...")
             wait(5)
 
 
+def usage():
+    print("")
+    print(f"Usage: python3 {sys.argv[0]} [location]", end="\n\n")
+    print("Optional flags:")
+    print("    -a            ADMIN:  Use to allow script to create and alter tables")
+    print("    -o            OFFSET: Use to add a random offset up to 10 second to beginning of script")
+    print("    -p <minutes>  PERIOD: Use to change the default (1 min) polliing period")
+
+
+def setAdmin():
+    print("This instance can create new tables with admin priviledge.")
+    global ADMIN
+    ADMIN = True
+    wait(READABLE_WAIT_TIME)
+
+def setPeriod():
+    global POLLING_PERIOD_IN_MINUTES
+    indexOfFlag = sys.argv.index(FLAG_PERIOD)
+    if indexOfFlag >= len(sys.argv):
+        return
+    POLLING_PERIOD_IN_MINUTES = int(sys.argv[indexOfFlag + 1])
+
+
+def valueIsACLIFlag(value):
+    return (value == FLAG_ADMIN or value == FLAG_OFFSET or value == FLAG_PERIOD)
+
+
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 2 or valueIsACLIFlag(sys.argv[1]):
         usage()
         sys.exit()
     if FLAG_ADMIN in sys.argv:
         setAdmin()
-    # if FLAG_PERIOD in sys.argv:
-        # setPeriod()
-            
-        
+    if FLAG_PERIOD in sys.argv:
+        setPeriod()
     main(sys.argv[1])
