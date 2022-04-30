@@ -202,8 +202,8 @@ def main(location):
             # timeTaken = int((finishedDateTime["ms"] - dateTime["ms"]) / 1000)
             # sys.exit(f"Completed in {timeTaken}s.")
         else:
-            # print("Waiting...")
-            wait(5)
+            print("Waiting...")
+            wait(30)
 
 
 def usage():
@@ -226,7 +226,9 @@ def setPeriod():
     indexOfFlag = sys.argv.index(FLAG_PERIOD)
     if indexOfFlag >= len(sys.argv):
         return
-    POLLING_PERIOD_IN_MINUTES = int(sys.argv[indexOfFlag + 1])
+    pollingPeriod = int(sys.argv[indexOfFlag + 1])
+    print(f"Setting polling period to {str(pollingPeriod)} minutes.")
+    POLLING_PERIOD_IN_MINUTES = pollingPeriod
 
 
 def valueIsACLIFlag(value):
