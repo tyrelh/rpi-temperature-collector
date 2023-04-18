@@ -142,6 +142,19 @@ def lowerProvisionForTableOffset(offsetDays, now):
         print(f"Table {targetTableName} doesn't exist! No need to lower provisions.")
 
 
+def deleteTableOffset(offsetDays, now):
+    targetDate = now + timedelta(offsetDays)
+    targetDateTime = getDateTime(targetDate)
+    targetTableName = getTableName(targetDateTime["date"])
+    print(f"Attempting to delete table {targetTableName}...", end="    ")
+    wait(READABLE_WAIT_TIME)
+    if checkIfTableIsReady(targetTableName):
+        table = dynamodb.Table(targetTableName).delete()
+        wait(UPDATE_REQUEST_WAIT_TIME)
+        if table:
+            print("Complete.")
+    else:
+        print(f"Table {targetTableName} doesn't exist! No need to delete.")
 
 
 def getTableName(dateString):
@@ -186,8 +199,10 @@ def main(location):
                     print(f"Table {tableName} DOES NOT exist!")
                     # create new table for today
                     createNewTable(tableName)
-                    # lower provisioned throughput of older tables
+                    # lower provisioned throughput of older table
                     lowerProvisionForTableOffset(-1, dateTime["source"])
+                    # delete older table
+                deleteTableOffset(-2, dateTime["source"])
             wait(READABLE_WAIT_TIME)
             # push stat to today's table
             if checkIfTableIsReady(tableName):
